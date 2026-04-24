@@ -1,4 +1,3 @@
-````markdown id="agjz6k"
 # Customer Ticket Streaming Pipeline with Redpanda and PySpark
 
 ## 1. Project Overview
@@ -807,4 +806,4 @@ The pipeline successfully:
 - Runs fully with Docker Compose.
 
 This POC satisfies the main requirements of the exercise and provides a reproducible foundation for a real-time customer ticket analytics system.
-````
+
