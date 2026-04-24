@@ -1,0 +1,100 @@
+version: "3.8"
+
+services:
+  # -----------------------------
+  # Redpanda broker
+  # -----------------------------
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    container_name: redpanda
+    ports:
+      - "19092:19092"   # Kafka API for your laptop: localhost:19092
+      - "9644:9644"     # Redpanda Admin API
+    command:
+      - redpanda
+      - start
+      - --mode
+      - dev-container
+      - --smp
+      - "1"
+      - --check=false
+      - --kafka-addr
+      - internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr
+      - internal://redpanda:9092,external://localhost:19092
+
+  # -----------------------------
+  # Explicit topic creation
+  # -----------------------------
+  redpanda-init:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    container_name: redpanda-init
+    depends_on:
+      - redpanda
+    entrypoint: ["/bin/sh", "-c"]
+    command: |
+      echo "Waiting for Redpanda to be ready..."
+
+      until rpk cluster info --brokers redpanda:9092 > /dev/null 2>&1; do
+        echo "Redpanda is not ready yet. Retrying..."
+        sleep 2
+      done
+
+      echo "Redpanda is ready."
+
+      echo "Creating topic: client_tickets"
+      rpk topic create client_tickets \
+        --brokers redpanda:9092 \
+        --partitions 3 \
+        --replicas 1 \
+        --if-not-exists
+
+      echo "Topic client_tickets is ready."
+      rpk topic describe client_tickets --brokers redpanda:9092
+
+  # -----------------------------
+  # Redpanda Console UI
+  # -----------------------------
+  console:
+    image: docker.redpanda.com/redpandadata/console:latest
+    container_name: redpanda-console
+    depends_on:
+      - redpanda
+    ports:
+      - "8080:8080"
+    environment:
+      - KAFKA_BROKERS=redpanda:9092
+
+  # -----------------------------
+  # Python ticket producer
+  # -----------------------------
+  producer:
+    build:
+      context: ./producer
+    container_name: producer
+    depends_on:
+      redpanda-init:
+        condition: service_completed_successfully
+    environment:
+      - KAFKA_BROKER=redpanda:9092
+      - PYTHONUNBUFFERED=1
+
+  # -----------------------------
+  # PySpark streaming consumer
+  # -----------------------------
+  spark:
+    build:
+      context: ./spark
+    container_name: spark_consumer
+    depends_on:
+      redpanda-init:
+        condition: service_completed_successfully
+    environment:
+      - KAFKA_BROKER=redpanda:9092
+      - KAFKA_TOPIC=client_tickets
+      - OUTPUT_PATH=/app/output
+      - CHECKPOINT_PATH=/app/checkpoint
+      - SPARK_SQL_SHUFFLE_PARTITIONS=4
+    volumes:
+      - ./output:/app/output
+      - ./checkpoint:/app/checkpoint
