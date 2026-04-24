@@ -1,5 +1,3 @@
-Yes. Below is a complete `README.md` you can copy directly into your project.
-
 ````markdown id="agjz6k"
 # Customer Ticket Streaming Pipeline with Redpanda and PySpark
 
